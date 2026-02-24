@@ -403,104 +403,33 @@ class CheckoutController extends Controller
 
 
            //cart update
-            /*=Session::get('coupon',[]);
-    
-            if(count($couponcode) > 0){
-              
-                $coupon_table=Coupon::where('coupon_code',$couponcode['coupon_code'])->first();
-              
-            $coupontable=Usedcoupon::where('customer_id',$user_id)->where('coupon_code',$couponcode['id'])->first();
-            if(!empty($coupontable)){
-                Usedcoupon::where('customer_id',$user_id)->where('coupon_code',$couponcode['id'])->update(['coupon_usedcount'=>$coupontable->coupon_usedcount + 1]);
-            }else{
-                $coupon= new Usedcoupon();
-                $coupon->order_id=$order->id;
-                $coupon->coupon_code=$coupon_table->id;
-                $coupon->customer_id=$user_id;
-                $coupon->coupon_usedcount=1;
-                $coupon->save();
+            // Cart update and coupon usage tracking
+            if (count($coupon) > 0) {
+                $coupon_table = \App\Models\Coupon::where('id', $coupon['id'])->first();
+                if ($coupon_table) {
+                    $used_coupon = \App\Models\Usedcoupon::where('customer_id', $user_id)->where('coupon_code', $coupon_table->id)->first();
+                    if ($used_coupon) {
+                        $used_coupon->increment('coupon_usedcount');
+                    } else {
+                        $new_used_coupon = new \App\Models\Usedcoupon();
+                        $new_used_coupon->order_id = $order->id;
+                        $new_used_coupon->coupon_code = $coupon_table->id;
+                        $new_used_coupon->customer_id = $user_id;
+                        $new_used_coupon->coupon_usedcount = 1;
+                        $new_used_coupon->save();
+                    }
+                }
             }
+
+            // Clear Cart and Session data
+            // Note: We clear it here for COD. For online payments, it's also cleared in their respective success callbacks.
+            // However, to ensure the user's reported issue is resolved across the board, we clear it now.
+            \App\Models\CartTable::where('customer_id', $user_id)->delete();
             
-            }
-           
-            //$details['email'] =auth()->guard('users')->user()->email;
-            //$details['admin_email'] ='raghul@oceansoftwares.in';
-            $details['customer_name'] =$request->billing_address['first_name'];
-            $details['order_id'] = $order->order_id;
-            
-            $baseUrl = url('/').'/order_pdf/'.$order->id;
-            
-            
-            $text_message="Your Product order link : https://taslim.oceansoftwares.in/prrayasha/public/order_pdf/{$order->id}";
-            
-            
-           
-           //dispatch(new \App\Jobs\CustomerEmailJob($details));
-           //dispatch(new \App\Jobs\AdminEmailJob($details));
-           
-           CartTable::where('customer_id',$user_id)->delete();
-           
-           Session::put('coupon',[]);
-           Session::forget('coupon',[]);
-          
-            
-            // $pdfUrl = $text_message;
-             
-            // print_r($text_message);die;
-            //sms message
-            
-            $baseUrl = url('/').'/order_pdf/'.$order->id;
-            $text_message="Your Product order link : https://taslim.oceansoftwares.in/prrayasha/public/order_pdf/{$order->id}";
-            
-            /*
-            $new_url =   url('/').'/order_pdf/'.$order->id;
-            $redirecturl="prrayasha/public/order_pdf/{$order->id}";
-            $url1 = base_convert($redirecturl, 10, 36);
-            $data = array(
-                'original_url' => $new_url,
-                'shortened_url' => $url1,
-                );
-            DB::table('url_shortener')->insert($data);
-            $shorturl = "https://taslim.oceansoftwares.in/url.php?id=".$url1;
-            
-            $fullname = $request->billing_address['first_name'];
-            $key = "8cnx5PVTXSCKxjZy";
-            $mbl = $request->billing_address['phone_number'];
-            $message_content = "Hi {#var#}, We are so glad that you placed an order with us! Here's your e-bill with order details Bill {#var#} We will share the tracking link once it's shipped.PRRCOL";
-            $message_content = preg_replace('/\{#var#\}/', $fullname, $message_content, 1);
-            $message_content = str_replace('{#var#}', $tracking_id, $message_content);
-            $encoded_message_content = urlencode($message_content);
-            $senderid = "PRRCOL";
-            $route = "1";
-            $templateid = "1707171887562080754";
-            $url = "https://sms.textspeed.in/vb/apikey.php?apikey=$key&senderid=$senderid&templateid=$templateid&number=$mbl&message=$encoded_message_content";
-            $output = file_get_contents($url);
-            */
-            
-            /*$id=$order->id;
-            $text_message="https://prrayashacollections.com/".$id;
-            $key = "8cnx5PVTXSCKxjZy";
-            $mbl = $request->billing_address['phone_number'];
-            $firstname = $request->billing_address['first_name'];
-            //$firstname="sabari";
-           // $tracking_id="1032";
-             $message_content = "Hi {#var#}, We are so glad that you placed an order with us! Here's your e-bill with order details Bill {#var#} We will share the tracking link once it's shipped.PRRCOL";
-            $message_content = preg_replace('/\{#var#\}/', $firstname, $message_content, 1);
-            $message_content = preg_replace('/\{#var#\}/',$text_message, $message_content, 1);
-             
-            
-            $encoded_message_content = urlencode($message_content);
-            $senderid = "PRRCOL";
-            $route = "1";
-            $templateid = "1707171887562080754";
-            $url = "https://sms.textspeed.in/vb/apikey.php?apikey=$key&senderid=$senderid&templateid=$templateid&number=$mbl&message=$encoded_message_content";
-            $output = file_get_contents($url);
-           
-           Session::put('coupon',[]);
-           Session::forget('coupon',[]);
-           
-            Session::put('cart',[]);
-           Session::forget('cart',[]);*/
+            Session::put('coupon', []);
+            Session::forget('coupon');
+            Session::put('cart', []);
+            Session::forget('cart');
            
           
           
