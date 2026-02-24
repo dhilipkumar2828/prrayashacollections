@@ -1,0 +1,48 @@
+[21-Feb-2025 02:39:34 UTC] PHP Fatal error:  Uncaught Error: Class "Illuminate\Support\Facades\Artisan" not found in /home/prrayashacollein/public_html/routes/console.php:17
+Stack trace:
+#0 {main}
+  thrown in /home/prrayashacollein/public_html/routes/console.php on line 17
+[21-Feb-2025 04:13:59 UTC] PHP Fatal error:  Uncaught Error: Class "Illuminate\Support\Facades\Broadcast" not found in /home/prrayashacollein/public_html/routes/channels.php:16
+Stack trace:
+#0 {main}
+  thrown in /home/prrayashacollein/public_html/routes/channels.php on line 16
+[21-Feb-2025 04:14:31 UTC] PHP Fatal error:  Uncaught Error: Class "Illuminate\Support\Facades\Route" not found in /home/prrayashacollein/public_html/routes/web.php:37
+Stack trace:
+#0 {main}
+  thrown in /home/prrayashacollein/public_html/routes/web.php on line 37
+[21-Feb-2025 04:14:48 UTC] PHP Fatal error:  Uncaught Error: Class "Illuminate\Support\Facades\Route" not found in /home/prrayashacollein/public_html/routes/api.php:17
+Stack trace:
+#0 {main}
+  thrown in /home/prrayashacollein/public_html/routes/api.php on line 17
+[23-Feb-2025 14:54:28 UTC] PHP Fatal error:  Uncaught Error: Class "Illuminate\Support\Facades\Route" not found in /home/prrayashacollein/public_html/routes/web.php:37
+Stack trace:
+#0 {main}
+  thrown in /home/prrayashacollein/public_html/routes/web.php on line 37
+[23-Feb-2025 14:55:39 UTC] PHP Fatal error:  Uncaught Error: Class "Illuminate\Support\Facades\Route" not found in /home/prrayashacollein/public_html/routes/api.php:17
+Stack trace:
+#0 {main}
+  thrown in /home/prrayashacollein/public_html/routes/api.php on line 17
+[23-Feb-2025 14:57:22 UTC] PHP Fatal error:  Uncaught Error: Class "Illuminate\Support\Facades\Broadcast" not found in /home/prrayashacollein/public_html/routes/channels.php:16
+Stack trace:
+#0 {main}
+  thrown in /home/prrayashacollein/public_html/routes/channels.php on line 16
+[24-Feb-2025 05:51:57 UTC] PHP Fatal error:  Uncaught Error: Class "Illuminate\Support\Facades\Artisan" not found in /home/prrayashacollein/public_html/routes/console.php:17
+Stack trace:
+#0 {main}
+  thrown in /home/prrayashacollein/public_html/routes/console.php on line 17
+[25-Mar-2025 01:56:59 UTC] PHP Fatal error:  Uncaught Error: Class "Illuminate\Support\Facades\Route" not found in /home/prrayashacollein/public_html/routes/web.php:37
+Stack trace:
+#0 {main}
+  thrown in /home/prrayashacollein/public_html/routes/web.php on line 37
+[25-Mar-2025 01:57:01 UTC] PHP Fatal error:  Uncaught Error: Class "Illuminate\Support\Facades\Route" not found in /home/prrayashacollein/public_html/routes/api.php:17
+Stack trace:
+#0 {main}
+  thrown in /home/prrayashacollein/public_html/routes/api.php on line 17
+[30-May-2025 12:21:07 UTC] PHP Fatal error:  Uncaught Error: Class "Illuminate\Support\Facades\Route" not found in /home/prrayashacollein/public_html/routes/api.php:17
+Stack trace:
+#0 {main}
+  thrown in /home/prrayashacollein/public_html/routes/api.php on line 17
+[30-May-2025 12:21:08 UTC] PHP Fatal error:  Uncaught Error: Class "Illuminate\Support\Facades\Route" not found in /home/prrayashacollein/public_html/routes/web.php:37
+Stack trace:
+#0 {main}
+  thrown in /home/prrayashacollein/public_html/routes/web.php on line 37
