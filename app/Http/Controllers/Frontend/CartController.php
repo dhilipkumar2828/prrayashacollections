@@ -604,7 +604,7 @@ else{
         $productimage=array();
         $tamilnadu_shiprate=DB::table('state_list')->where('id',$shipping_id)->first();
         $sub_amt=0;
-        $shipping=$tamilnadu_shiprate->shipping_charge;
+        $shipping = ($tamilnadu_shiprate) ? $tamilnadu_shiprate->shipping_charge : 0;
         foreach($carts as $key=>$cart){
             if(auth()->guard('users')->user() || auth()->guard('guest')->user()){  
                     
