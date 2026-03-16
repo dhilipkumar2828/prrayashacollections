@@ -356,7 +356,45 @@ class CheckoutController extends Controller
            $orderproduct->tax_rate=$calculated_value['tax_price'];
            $orderproduct->total_tax=$productvariant->regular_price;
            $orderproduct->save();
-        //   ProductVariant::where('product_id',$carts[$i]->product_id)->where('variants',$carts[$i]->arrtibute_name)->update(['in_stock'=>$productvariant->in_stock - $carts[$i]->product_qty]);
+        
+            // Decrement product variant stock and update inventory/sold and stock_log
+            try {
+                // Update product_variants table
+                ProductVariant::where('id', $productvariant->id)->decrement('in_stock', $carts[$i]->product_qty);
+
+                // Update inventory table if present
+                $inventory = \App\Models\Inventory::where('prod_variant_id', $productvariant->id)->first();
+                if($inventory){
+                    $inventory->in_stock = max(0, $inventory->in_stock - $carts[$i]->product_qty);
+                    $inventory->sold = $inventory->sold + $carts[$i]->product_qty;
+                    $inventory->save();
+                    $closure_qty = $inventory->in_stock;
+                } else {
+                    // Fallback closure qty from productvariant
+                    $closure_qty = max(0, $productvariant->in_stock - $carts[$i]->product_qty);
+                }
+
+                // Insert stock log
+                $dataa = [];
+                $dataa['product_id'] = $carts[$i]->product_id;
+                $dataa['v_id'] = $productvariant->id;
+                $dataa['size'] = $carts[$i]->arrtibute_name;
+                $dataa['opr'] = 'REDUCE';
+                $dataa['qty'] = $carts[$i]->product_qty;
+                $dataa['closure_qty'] = $closure_qty;
+                $dataa['remarks'] = 'Order Placed';
+                $dataa['created_at'] = date('Y-m-d H:i:s');
+                DB::table('stock_log')->insert($dataa);
+                // Recalculate and persist product total stock (sum of variant in_stock)
+                try {
+                    $totalStock = ProductVariant::where('product_id', $carts[$i]->product_id)->sum('in_stock');
+                    Product::where('id', $carts[$i]->product_id)->update(['stock' => $totalStock]);
+                } catch (\Exception $e) {
+                    Log::error('Product stock update error: '.$e->getMessage());
+                }
+            } catch (\Exception $e) {
+                Log::error('Stock update error: '.$e->getMessage());
+            }
         
         }
             $lastname='';
@@ -448,9 +486,12 @@ class CheckoutController extends Controller
         
         
         
-           $response['success']=true;
-           $tempreturnemail = isset(auth()->guard('users')->user()->email) ? auth()->guard('users')->user()->email : '';
-           return response()->json(['response'=>$response,'order_id'=>$order->id, 'totalAmount' => $totalAmount, 'email' => $tempreturnemail]);
+             // Clear any stock locks for this customer now that stock is reduced
+             DB::table('stock_lock')->where('customer_id', $user_id)->delete();
+
+             $response['success']=true;
+            $tempreturnemail = isset(auth()->guard('users')->user()->email) ? auth()->guard('users')->user()->email : '';
+            return response()->json(['response'=>$response,'order_id'=>$order->id, 'totalAmount' => $totalAmount, 'email' => $tempreturnemail]);
    }
 
 
@@ -769,7 +810,40 @@ class CheckoutController extends Controller
         //   $orderproduct->tax_rate=$calculated_value['tax_price'];
         //   $orderproduct->total_tax=$productvariant->regular_price;
         //   $orderproduct->save();
-           ProductVariant::where('product_id',$carts[$i]->product_id)->where('variants',$carts[$i]->arrtibute_name)->update(['in_stock'=>$productvariant->in_stock - $carts[$i]->product_qty]);
+           try {
+               ProductVariant::where('id', $productvariant->id)->decrement('in_stock', $carts[$i]->product_qty);
+
+               // Update inventory and stock_log for payment completion
+               $inventory = \App\Models\Inventory::where('prod_variant_id', $productvariant->id)->first();
+               if($inventory){
+                   $inventory->in_stock = max(0, $inventory->in_stock - $carts[$i]->product_qty);
+                   $inventory->sold = $inventory->sold + $carts[$i]->product_qty;
+                   $inventory->save();
+                   $closure_qty = $inventory->in_stock;
+               } else {
+                   $closure_qty = max(0, $productvariant->in_stock - $carts[$i]->product_qty);
+               }
+
+               $dataa = [];
+               $dataa['product_id'] = $carts[$i]->product_id;
+               $dataa['v_id'] = $productvariant->id;
+               $dataa['size'] = $carts[$i]->arrtibute_name;
+               $dataa['opr'] = 'REDUCE';
+               $dataa['qty'] = $carts[$i]->product_qty;
+               $dataa['closure_qty'] = $closure_qty;
+               $dataa['remarks'] = 'Payment Completed';
+               $dataa['created_at'] = date('Y-m-d H:i:s');
+               DB::table('stock_log')->insert($dataa);
+               // Recalculate and persist product total stock (sum of variant in_stock)
+               try {
+                   $totalStock = ProductVariant::where('product_id', $carts[$i]->product_id)->sum('in_stock');
+                   Product::where('id', $carts[$i]->product_id)->update(['stock' => $totalStock]);
+               } catch (\Exception $e) {
+                   Log::error('Product stock update error (payment): '.$e->getMessage());
+               }
+           } catch (\Exception $e) {
+               Log::error('Stock update error (payment): '.$e->getMessage());
+           }
         }
         
           DB::table('stock_lock')->where('customer_id',$user_id)->delete();
