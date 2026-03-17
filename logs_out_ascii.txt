@@ -1,0 +1,7 @@
+Total Order Placed entries: 0
+Total ORD entries: 8759
+ID: 27072, Remarks: [Initial Product Stock]
+ID: 27071, Remarks: [Initial Product Stock]
+ID: 27070, Remarks: [Initial Product Stock]
+ID: 27069, Remarks: [Initial Product Stock]
+ID: 27068, Remarks: [Initial Product Stock]

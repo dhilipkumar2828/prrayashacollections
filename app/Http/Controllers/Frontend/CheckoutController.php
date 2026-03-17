@@ -2,11 +2,12 @@
 namespace App\Http\Controllers\Frontend;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use Auth;
-use Str;
-use Session;
-use Cart;
-use Redirect;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Redirect;
+use Illuminate\Support\Str;
 use App\Models\User;
 use Mail;
 use App\Mail\OrderMail;
@@ -25,18 +26,18 @@ use App\Models\Suborders;
 use App\Models\Subordersitems;
 use App\Models\Sales;
 use App\Models\BillingAddress;
-use App\Models\OrderProduct;
 use App\Traits\PriceTrait;
 use App\Traits\CouponTrait;
 use App\Models\CustomerTable;
+use App\Models\ProductAttribute;
+use App\Models\OrderProduct;
 use App\Models\Product;
 use App\Models\CartTable;
-use App\Models\ProductAttribute;
 use App\Models\ProductVariant;
-use Illuminate\Support\Facades\DB;
-use App\Traits\SMSTrait;
-use Illuminate\Support\Facades\Log;
 use App\Models\Guest;
+use App\Traits\SMSTrait;
+use Exception;
+
 
 class CheckoutController extends Controller
 {
@@ -297,7 +298,8 @@ class CheckoutController extends Controller
         
         // Generate order ID
         $ordersdetails = DB::table('orders')->where('status', '!=', '')->orderBy('id', 'desc')->first();
-        $order_id = empty($ordersdetails->order_id) ? '001' : '00' . ($ordersdetails->id + 1);
+        $newId = empty($ordersdetails) ? 1 : ($ordersdetails->id + 1);
+        $order_id = 'ORD-00' . $newId;
         
         // Create the order
         $order = new Order;
@@ -357,43 +359,45 @@ class CheckoutController extends Controller
            $orderproduct->total_tax=$productvariant->regular_price;
            $orderproduct->save();
         
-            // Decrement product variant stock and update inventory/sold and stock_log
-            try {
-                // Update product_variants table
-                ProductVariant::where('id', $productvariant->id)->decrement('in_stock', $carts[$i]->product_qty);
-
-                // Update inventory table if present
-                $inventory = \App\Models\Inventory::where('prod_variant_id', $productvariant->id)->first();
-                if($inventory){
-                    $inventory->in_stock = max(0, $inventory->in_stock - $carts[$i]->product_qty);
-                    $inventory->sold = $inventory->sold + $carts[$i]->product_qty;
-                    $inventory->save();
-                    $closure_qty = $inventory->in_stock;
-                } else {
-                    // Fallback closure qty from productvariant
-                    $closure_qty = max(0, $productvariant->in_stock - $carts[$i]->product_qty);
-                }
-
-                // Insert stock log
-                $dataa = [];
-                $dataa['product_id'] = $carts[$i]->product_id;
-                $dataa['v_id'] = $productvariant->id;
-                $dataa['size'] = $carts[$i]->arrtibute_name;
-                $dataa['opr'] = 'REDUCE';
-                $dataa['qty'] = $carts[$i]->product_qty;
-                $dataa['closure_qty'] = $closure_qty;
-                $dataa['remarks'] = 'Order Placed';
-                $dataa['created_at'] = date('Y-m-d H:i:s');
-                DB::table('stock_log')->insert($dataa);
-                // Recalculate and persist product total stock (sum of variant in_stock)
+            // Decrement product variant stock and update inventory/sold and stock_log ONLY for COD
+            if($request->payment_status == 'cod'){
                 try {
-                    $totalStock = ProductVariant::where('product_id', $carts[$i]->product_id)->sum('in_stock');
-                    Product::where('id', $carts[$i]->product_id)->update(['stock' => $totalStock]);
+                    // Update product_variants table
+                    ProductVariant::where('id', $productvariant->id)->decrement('in_stock', $carts[$i]->product_qty);
+
+                    // Update inventory table if present
+                    $inventory = \App\Models\Inventory::where('prod_variant_id', $productvariant->id)->first();
+                    if($inventory){
+                        $inventory->in_stock = max(0, $inventory->in_stock - $carts[$i]->product_qty);
+                        $inventory->sold = $inventory->sold + $carts[$i]->product_qty;
+                        $inventory->save();
+                        $closure_qty = $inventory->in_stock;
+                    } else {
+                        // Fallback closure qty from productvariant
+                        $closure_qty = max(0, $productvariant->in_stock - $carts[$i]->product_qty);
+                    }
+
+                    // Insert stock log
+                    $dataa = [];
+                    $dataa['product_id'] = $carts[$i]->product_id;
+                    $dataa['v_id'] = $productvariant->id;
+                    $dataa['size'] = $carts[$i]->arrtibute_name;
+                    $dataa['opr'] = 'REDUCE';
+                    $dataa['qty'] = $carts[$i]->product_qty;
+                    $dataa['closure_qty'] = $closure_qty;
+                    $dataa['remarks'] = $order->order_id ?? $order_id;
+                    $dataa['created_at'] = date('Y-m-d H:i:s');
+                    DB::table('stock_log')->insert($dataa);
+                    // Recalculate and persist product total stock (sum of variant in_stock)
+                    try {
+                        $totalStock = ProductVariant::where('product_id', $carts[$i]->product_id)->sum('in_stock');
+                        Product::where('id', $carts[$i]->product_id)->update(['stock' => $totalStock]);
+                    } catch (\Exception $e) {
+                        Log::error('Product stock update error: '.$e->getMessage());
+                    }
                 } catch (\Exception $e) {
-                    Log::error('Product stock update error: '.$e->getMessage());
+                    Log::error('Stock update error: '.$e->getMessage());
                 }
-            } catch (\Exception $e) {
-                Log::error('Stock update error: '.$e->getMessage());
             }
         
         }
@@ -787,6 +791,8 @@ class CheckoutController extends Controller
             DB::table('orders')->where('id',$orderId)->update(['payment_status' => 'paid','order_id'=>$order_id_temp]);
         
         }
+        
+        $order = DB::table('orders')->where('id',$orderId)->first();
     
         
         $data=Payment::where('order_id',$order->id)->first();
@@ -795,54 +801,54 @@ class CheckoutController extends Controller
        
         $data->update();
         
-        $carts=CartTable::where('customer_id',$user_id)->where('status','active')->get();
-        //order product
-        for($i=0;$i<count($carts);$i++){
-           $product=DB::table('products')->where('id',$carts[$i]->product_id)->first();
-           $productvariant=ProductVariant::where('status','active')->where('product_id',$carts[$i]->product_id)->where('variants',$carts[$i]->arrtibute_name)->first();
-        //   $calculated_value= $this->fetchSalePrice($productvariant->regular_price,$product->tax_id,$product->discount,$product->discount_type);
-        //   $orderproduct=new OrderProduct;
-        //   $orderproduct->order_id=$order->id;
-        //   $orderproduct->product_id=$carts[$i]->product_id;
-        //   $orderproduct->quantity=$carts[$i]->product_qty;
-        //   $orderproduct->amount=$carts[$i]->price;
-        //   $orderproduct->option=$carts[$i]->arrtibute_name;
-        //   $orderproduct->tax_rate=$calculated_value['tax_price'];
-        //   $orderproduct->total_tax=$productvariant->regular_price;
-        //   $orderproduct->save();
-           try {
-               ProductVariant::where('id', $productvariant->id)->decrement('in_stock', $carts[$i]->product_qty);
+        // Fetch products from order_products instead of cart since cart is empty by now
+        $order_products = DB::table('order_products')->where('order_id', $order->id)->get();
+        
+        // order product looping
+        foreach($order_products as $op){
+           $product = DB::table('products')->where('id', $op->product_id)->first();
+           // Find the specific variant using the option field which stores the attribute name
+           $productvariant = ProductVariant::where('status', 'active')
+               ->where('product_id', $op->product_id)
+               ->where('variants', $op->option)
+               ->first();
 
-               // Update inventory and stock_log for payment completion
-               $inventory = \App\Models\Inventory::where('prod_variant_id', $productvariant->id)->first();
-               if($inventory){
-                   $inventory->in_stock = max(0, $inventory->in_stock - $carts[$i]->product_qty);
-                   $inventory->sold = $inventory->sold + $carts[$i]->product_qty;
-                   $inventory->save();
-                   $closure_qty = $inventory->in_stock;
-               } else {
-                   $closure_qty = max(0, $productvariant->in_stock - $carts[$i]->product_qty);
-               }
-
-               $dataa = [];
-               $dataa['product_id'] = $carts[$i]->product_id;
-               $dataa['v_id'] = $productvariant->id;
-               $dataa['size'] = $carts[$i]->arrtibute_name;
-               $dataa['opr'] = 'REDUCE';
-               $dataa['qty'] = $carts[$i]->product_qty;
-               $dataa['closure_qty'] = $closure_qty;
-               $dataa['remarks'] = 'Payment Completed';
-               $dataa['created_at'] = date('Y-m-d H:i:s');
-               DB::table('stock_log')->insert($dataa);
-               // Recalculate and persist product total stock (sum of variant in_stock)
+           if($productvariant){
                try {
-                   $totalStock = ProductVariant::where('product_id', $carts[$i]->product_id)->sum('in_stock');
-                   Product::where('id', $carts[$i]->product_id)->update(['stock' => $totalStock]);
+                   ProductVariant::where('id', $productvariant->id)->decrement('in_stock', $op->quantity);
+
+                   // Update inventory and stock_log for payment completion
+                   $inventory = \App\Models\Inventory::where('prod_variant_id', $productvariant->id)->first();
+                   if($inventory){
+                       $inventory->in_stock = max(0, $inventory->in_stock - $op->quantity);
+                       $inventory->sold = $inventory->sold + $op->quantity;
+                       $inventory->save();
+                       $closure_qty = $inventory->in_stock;
+                   } else {
+                       $closure_qty = max(0, $productvariant->in_stock - $op->quantity);
+                   }
+
+                   $dataa = [];
+                   $dataa['product_id'] = $op->product_id;
+                   $dataa['v_id'] = $productvariant->id;
+                   $dataa['size'] = $op->option;
+                   $dataa['opr'] = 'REDUCE';
+                   $dataa['qty'] = $op->quantity;
+                   $dataa['closure_qty'] = $closure_qty;
+                   $dataa['remarks'] = $order->order_id;
+                   $dataa['created_at'] = date('Y-m-d H:i:s');
+                   DB::table('stock_log')->insert($dataa);
+                   
+                   // Recalculate and persist product total stock
+                   try {
+                       $totalStock = ProductVariant::where('product_id', $op->product_id)->sum('in_stock');
+                       Product::where('id', $op->product_id)->update(['stock' => $totalStock]);
+                   } catch (\Exception $e) {
+                       Log::error('Product stock update error (payment): '.$e->getMessage());
+                   }
                } catch (\Exception $e) {
-                   Log::error('Product stock update error (payment): '.$e->getMessage());
+                   Log::error('Variant stock update error (payment): '.$e->getMessage());
                }
-           } catch (\Exception $e) {
-               Log::error('Stock update error (payment): '.$e->getMessage());
            }
         }
         
@@ -1168,47 +1174,60 @@ $logEntry .= "[" . now() . "] PhonePe callback hit\n";
         
         }
 
+        $order = DB::table('orders')->where('id', $orderId)->first();
+
         $data=Payment::where('order_id',$order->id)->first();
         $data->payment_id = $transactionId;
         $data->payment_status = 2;
        
         $data->update();
         
-        // $carts=CartTable::where('customer_id',$user_id)->where('status','active')->get();
+        // Fetch products from order_products instead of cart since cart is empty
+        $order_products = DB::table('order_products')->where('order_id', $order->id)->get();
         
-        
-         $carts=DB::table('cart_tables')->selectRaw('cart_tables.*')->Join('product_variants','product_variants.id','cart_tables.product_varient')
-              ->where('product_variants.in_stock','>',0)
-               ->where('customer_id',$user_id)->get();
-               
-               
-        //order product
-        for($i=0;$i<count($carts);$i++){
-           $product=DB::table('products')->where('id',$carts[$i]->product_id)->first();
-           $productvariant=ProductVariant::where('status','active')->where('product_id',$carts[$i]->product_id)->where('variants',$carts[$i]->arrtibute_name)->first();
-        //   $calculated_value= $this->fetchSalePrice($productvariant->regular_price,$product->tax_id,$product->discount,$product->discount_type);
-        //   $orderproduct=new OrderProduct;
-        //   $orderproduct->order_id=$order->id;
-        //   $orderproduct->product_id=$carts[$i]->product_id;
-        //   $orderproduct->quantity=$carts[$i]->product_qty;
-        //   $orderproduct->amount=$carts[$i]->price;
-        //   $orderproduct->option=$carts[$i]->arrtibute_name;
-        //   $orderproduct->tax_rate=$calculated_value['tax_price'];
-        //   $orderproduct->total_tax=$productvariant->regular_price;
-        //   $orderproduct->save();
-           ProductVariant::where('product_id',$carts[$i]->product_id)->where('variants',$carts[$i]->arrtibute_name)->update(['in_stock'=>$productvariant->in_stock - $carts[$i]->product_qty]);
-           
-        //   Logs for Stocks
-                $data = [];
-                $data['product_id'] = $carts[$i]->product_id;
-                $data['v_id'] = $carts[$i]->product_varient;
-                $data['size'] = $carts[$i]->arrtibute_name;
-                $data['opr'] = 'MINUS';
-                $data['qty'] = $carts[$i]->product_qty;
-                $data['closure_qty'] = $productvariant->in_stock - $carts[$i]->product_qty;
-                $data['remarks'] = $order_id_temp;
-                $data['created_at'] = date('Y-m-d H:i:s');
-                DB::table('stock_log')->insert($data);
+        // order product looping
+        foreach($order_products as $op){
+           $product = DB::table('products')->where('id', $op->product_id)->first();
+           $productvariant = ProductVariant::where('status', 'active')
+               ->where('product_id', $op->product_id)
+               ->where('variants', $op->option)
+               ->first();
+
+           if($productvariant){
+                // Decrement stock
+                ProductVariant::where('id', $productvariant->id)->decrement('in_stock', $op->quantity);
+                
+                // Inventory update
+                $inventory = \App\Models\Inventory::where('prod_variant_id', $productvariant->id)->first();
+                if($inventory){
+                    $inventory->in_stock = max(0, $inventory->in_stock - $op->quantity);
+                    $inventory->sold = $inventory->sold + $op->quantity;
+                    $inventory->save();
+                    $closure_qty = $inventory->in_stock;
+                } else {
+                    $closure_qty = max(0, $productvariant->in_stock - $op->quantity);
+                }
+
+                // Logs for Stocks
+                $stockLogData = [];
+                $stockLogData['product_id'] = $op->product_id;
+                $stockLogData['v_id'] = $productvariant->id;
+                $stockLogData['size'] = $op->option;
+                $stockLogData['opr'] = 'REDUCE';
+                $stockLogData['qty'] = $op->quantity;
+                $stockLogData['closure_qty'] = $closure_qty;
+                $stockLogData['remarks'] = $order->order_id ?? $order_id_temp;
+                $stockLogData['created_at'] = date('Y-m-d H:i:s');
+                DB::table('stock_log')->insert($stockLogData);
+
+                // Product total stock update
+                try {
+                    $totalStock = ProductVariant::where('product_id', $op->product_id)->sum('in_stock');
+                    Product::where('id', $op->product_id)->update(['stock' => $totalStock]);
+                } catch (\Exception $e) {
+                    Log::error('Product update error (phonepe): '.$e->getMessage());
+                }
+           }
         }
         
         $billing_address = DB::table('billing_address')->where('order_id',$order->id)->first();
